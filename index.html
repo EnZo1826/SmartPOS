@@ -159,23 +159,24 @@ body {
    LOGIN SCREEN
    ═══════════════════════════════════════════════════ */
 #view-login {
-  flex-direction: column; align-items: center; justify-content: center;
+  flex-direction: column; align-items: center; justify-content: flex-start;
+  overflow-y: auto;
   background: radial-gradient(ellipse at 50% 0%, rgba(240,165,0,0.08) 0%, transparent 60%), var(--bg-base);
 }
-.login-container { width: 360px; max-width: 90vw; }
-.login-logo { text-align: center; margin-bottom: 40px; }
+.login-container { width: 360px; max-width: 92vw; padding: 24px 0 32px; }
+.login-logo { text-align: center; margin-bottom: 20px; }
 .login-logo .big-logo {
-  width: 80px; height: 80px; margin: 0 auto 16px;
+  width: 64px; height: 64px; margin: 0 auto 10px;
   background: var(--accent); color: #000;
-  font-family: var(--font-mono); font-size: 28px; font-weight: 700;
+  font-family: var(--font-mono); font-size: 22px; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
   clip-path: polygon(12% 0%, 88% 0%, 100% 12%, 100% 88%, 88% 100%, 12% 100%, 0% 88%, 0% 12%);
   box-shadow: var(--glow-accent);
 }
-.login-title { font-size: 28px; font-weight: 900; letter-spacing: 4px; color: var(--accent); }
-.login-sub { font-size: 11px; color: var(--text-muted); letter-spacing: 3px; margin-top: 4px; }
-.login-form { background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 28px; }
-.form-group { margin-bottom: 16px; }
+.login-title { font-size: 24px; font-weight: 900; letter-spacing: 4px; color: var(--accent); }
+.login-sub { font-size: 10px; color: var(--text-muted); letter-spacing: 3px; margin-top: 4px; }
+.login-form { background: var(--bg-panel); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 20px; }
+.form-group { margin-bottom: 12px; }
 .form-label { font-size: 11px; letter-spacing: 1.5px; color: var(--text-muted); margin-bottom: 6px; display: block; }
 .form-input {
   width: 100%; padding: 10px 14px;
@@ -188,16 +189,16 @@ body {
 
 /* PIN PAD */
 .pin-display {
-  display: flex; gap: 8px; justify-content: center; margin-bottom: 20px;
+  display: flex; gap: 8px; justify-content: center; margin-bottom: 16px;
 }
 .pin-dot {
   width: 12px; height: 12px; border-radius: 50%;
   border: 1px solid var(--border-bright); transition: all 0.2s;
 }
 .pin-dot.filled { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 8px var(--accent); }
-.pinpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+.pinpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 12px; }
 .pin-btn {
-  padding: 16px; text-align: center; cursor: pointer;
+  padding: 14px; text-align: center; cursor: pointer;
   background: var(--bg-card); border: 1px solid var(--border);
   border-radius: var(--radius); font-size: 18px; font-weight: 600;
   font-family: var(--font-mono); color: var(--text-primary);
@@ -375,7 +376,7 @@ body {
 .cart-fab {
   display: none;
   position: fixed;
-  bottom: 76px;
+  bottom: 80px;
   right: 16px;
   z-index: 198;
   width: 60px; height: 60px; border-radius: 50%;
@@ -759,7 +760,7 @@ body {
    SYNC OVERLAY
    ═══════════════════════════════════════════════════ */
 .sync-fab {
-  position: fixed; bottom: 70px; left: 16px; z-index: 200;
+  position: fixed; bottom: 72px; left: 16px; z-index: 197;
   width: 44px; height: 44px; border-radius: 50%;
   background: var(--bg-elevated); border: 1px solid var(--border-bright);
   cursor: pointer; display: flex; align-items: center; justify-content: center;
@@ -2183,11 +2184,16 @@ const POS = {
     SyncEngine.updateStats();
   },
 
-  showReceipt(order, items, payments) {
+  showReceipt(order, items, payments, refunds = []) {
     const cfg = JSON.parse(localStorage.getItem('pos_config') || '{}');
     const store = cfg.store_name || 'SmartPOS';
     const payStr = payments.map(p => `<div class="receipt-row"><span>${p.method.toUpperCase()}</span><span>$${Utils.fmt(p.amount)}</span></div>`).join('');
     const changeGiven = payments[0]?.change_given;
+    const refundTotal = refunds.reduce((s, r) => s + (r.amount || 0), 0);
+    const refundStr = refunds.length ? `
+      <div class="receipt-divider"></div>
+      <div class="receipt-row" style="color:#ff3d5a"><span>↩ REFUNDED</span><span>-$${Utils.fmt(refundTotal)}</span></div>
+      ${refunds.map(r => `<div class="receipt-row" style="font-size:10px;color:#888"><span>${r.reason || 'No reason'}</span><span>${Utils.formatDate(r.created_at_local)}</span></div>`).join('')}` : '';
     document.getElementById('receipt-content').innerHTML = `
       <div class="receipt-paper">
         <div class="receipt-header">
@@ -2195,6 +2201,7 @@ const POS = {
           <div>${cfg.store_id || 'STORE-001'} | ${cfg.terminal_id || 'TERMINAL-001'}</div>
           <div>${Utils.formatDate(order.created_at_local)}</div>
           <div><strong>${order.order_number}</strong></div>
+          ${order.status === 'refunded' ? '<div style="color:#ff3d5a;font-weight:700;margin-top:4px">*** REFUNDED ***</div>' : ''}
         </div>
         <div>${items.map(i=>`<div class="receipt-row"><span>${i.product_name} ×${i.qty}</span><span>$${Utils.fmt(i.line_total)}</span></div>`).join('')}</div>
         <div class="receipt-divider"></div>
@@ -2206,6 +2213,7 @@ const POS = {
         <div class="receipt-divider"></div>
         ${payStr}
         ${changeGiven > 0 ? `<div class="receipt-row"><span>CHANGE</span><span>$${Utils.fmt(changeGiven)}</span></div>` : ''}
+        ${refundStr}
         <div class="receipt-footer">
           Cashier: ${order.cashier_name || 'N/A'}<br>
           Thank you for your purchase!<br>
@@ -2254,20 +2262,60 @@ const POS = {
     const order = this.refundOrder;
     const checked = document.querySelectorAll('.refund-check:checked');
     if (!checked.length) { toast('Select items to refund', 'error'); return; }
-    const reason = document.getElementById('refund-reason').value;
-    const items = Array.from(checked).map(c => c.dataset.uuid);
-    const amount = Array.from(checked).reduce((s,c) => s+parseFloat(c.dataset.price), 0);
+    const reason = document.getElementById('refund-reason').value || 'No reason given';
+    const refundedItemUuids = Array.from(checked).map(c => c.dataset.uuid);
+    const amount = Array.from(checked).reduce((s,c) => s + parseFloat(c.dataset.price), 0);
+
+    // Calculate proportional tax on refunded amount
+    const pretaxBase = (order.subtotal || 0) - (order.discount_amount || 0);
+    const taxRate = pretaxBase > 0 ? (order.tax_amount || 0) / pretaxBase : 0;
+    const refundTax = parseFloat((amount * taxRate).toFixed(2));
+
     const refund = {
       uuid: Utils.uuid(), order_uuid: order.uuid,
-      items, reason, amount, status: 'processed',
-      created_at_local: Utils.now(), sync_status: 'pending'
+      items: refundedItemUuids, reason, amount,
+      tax_amount: refundTax,
+      cashier_name: Auth.currentUser?.name || '',
+      status: 'processed',
+      created_at_local: Utils.now(), sync_status: 'pending',
+      device_id: Utils.deviceId()
     };
+
     await db.refunds.add(refund);
     await db.orders.where('uuid').equals(order.uuid).modify({ status: 'refunded' });
     await SyncEngine.addToOutbox('refund', refund.uuid, 'create', refund);
+
+    // Restore stock for refunded items
+    const allItems = await db.order_items.where('order_uuid').equals(order.uuid).toArray();
+    for (const item of allItems) {
+      if (refundedItemUuids.includes(item.uuid)) {
+        const product = await db.products.get(item.product_uuid);
+        if (product && product.track_stock) {
+          await db.products.update(item.product_uuid, { stock: (product.stock || 0) + item.qty });
+        }
+        await db.inventory_movements.add({
+          uuid: Utils.uuid(), product_uuid: item.product_uuid,
+          type: 'refund', qty: item.qty,
+          reference_uuid: refund.uuid, created_at_local: Utils.now()
+        });
+      }
+    }
+
     document.getElementById('refund-modal').classList.remove('show');
+    document.getElementById('order-detail-modal').classList.remove('show');
     toast(`Refund of ${Utils.currency(amount)} processed`, 'success');
+
+    // Reload orders list so status updates
+    loadOrders();
+
+    // Show updated receipt with refund noted
+    const items = await db.order_items.where('order_uuid').equals(order.uuid).toArray();
+    const payments = await db.payments.where('order_uuid').equals(order.uuid).toArray();
+    const updatedOrder = await db.orders.get(order.uuid);
+    this.showReceipt(updatedOrder, items, payments, [refund]);
+
     if (navigator.onLine) SyncEngine.sync();
+    POS.renderProducts();
   }
 };
 
@@ -2309,25 +2357,39 @@ async function loadOrders() {
 async function showOrderDetail(order) {
   const items = await db.order_items.where('order_uuid').equals(order.uuid).toArray();
   const payments = await db.payments.where('order_uuid').equals(order.uuid).toArray();
+  const refunds = await db.refunds.where('order_uuid').equals(order.uuid).toArray();
+
+  const refundTotal = refunds.reduce((s, r) => s + (r.amount || 0), 0);
+
   document.getElementById('order-detail-title').textContent = order.order_number || 'Order Detail';
   document.getElementById('order-detail-content').innerHTML = `
     <div style="margin-bottom:16px">
+      <div style="font-size:11px;color:var(--text-muted);letter-spacing:1px;margin-bottom:8px">STATUS: <span class="status-${order.status}" style="font-weight:700">${(order.status||'').toUpperCase()}</span></div>
       ${items.map(i=>`<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px"><span>${i.product_name} ×${i.qty}</span><span style="font-family:var(--font-mono)">${Utils.currency(i.line_total)}</span></div>`).join('')}
       <div style="border-top:1px solid var(--border);margin:8px 0;padding-top:8px">
-        <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:14px;font-weight:700"><span>TOTAL</span><span style="color:var(--accent)">${Utils.currency(order.total)}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:4px"><span>SUBTOTAL</span><span>${Utils.currency(order.subtotal)}</span></div>
+        ${order.discount_amount > 0 ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--danger);margin-bottom:4px"><span>DISCOUNT</span><span>-${Utils.currency(order.discount_amount)}</span></div>` : ''}
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-muted);margin-bottom:4px"><span>TAX</span><span>${Utils.currency(order.tax_amount)}</span></div>
+        <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:15px;font-weight:700;margin-top:6px"><span>TOTAL</span><span style="color:var(--accent)">${Utils.currency(order.total)}</span></div>
+        ${refundTotal > 0 ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--danger);margin-top:6px;padding-top:6px;border-top:1px solid var(--border)"><span>REFUNDED</span><span>-${Utils.currency(refundTotal)}</span></div>` : ''}
       </div>
       <div style="font-size:11px;color:var(--text-secondary);margin-top:8px">${payments.map(p=>`${p.method.toUpperCase()}: ${Utils.currency(p.amount)}`).join(' | ')}</div>
+      ${refunds.length ? `<div style="margin-top:10px;padding:8px;background:rgba(255,61,90,0.08);border:1px solid rgba(255,61,90,0.2);border-radius:4px;font-size:11px;color:var(--danger)">↩ Refund processed: ${refunds.map(r=>r.reason||'No reason').join(', ')}</div>` : ''}
     </div>
     <div style="display:flex;gap:8px">
       ${order.status === 'completed' ? `<button class="btn btn-danger btn-sm" onclick="POS.openRefund(${JSON.stringify(order).replace(/"/g,'&quot;')})">↩ Refund</button>` : ''}
-      <button class="btn btn-secondary btn-sm" onclick="POS.showReceipt(${JSON.stringify(order).replace(/"/g,'&quot;')}, [], [])">🧾 Receipt</button>
+      <button class="btn btn-secondary btn-sm" onclick="showReceiptForOrder('${order.uuid}')">🧾 Receipt</button>
     </div>`;
   document.getElementById('order-detail-modal').classList.add('show');
 }
 
-// ═══════════════════════════════════════════════════════════════════
-//  SHIFTS VIEW
-// ═══════════════════════════════════════════════════════════════════
+async function showReceiptForOrder(orderUuid) {
+  const order = await db.orders.get(orderUuid);
+  const items = await db.order_items.where('order_uuid').equals(orderUuid).toArray();
+  const payments = await db.payments.where('order_uuid').equals(orderUuid).toArray();
+  const refunds = await db.refunds.where('order_uuid').equals(orderUuid).toArray();
+  if (order) POS.showReceipt(order, items, payments, refunds);
+}
 async function loadShifts() {
   const shift = await db.shifts.where('status').equals('open').first();
   const content = document.getElementById('shift-content');
@@ -2434,38 +2496,60 @@ async function openCashEvent(type) {
 //  REPORTS VIEW
 // ═══════════════════════════════════════════════════════════════════
 async function loadReports() {
-  const orders = await db.orders.where('status').equals('completed').toArray();
+  // Include both completed AND refunded orders
+  const allOrders = await db.orders.toArray();
+  const orders = allOrders.filter(o => o.status === 'completed' || o.status === 'refunded');
   const today = new Date().toISOString().slice(0,10);
   const todayOrders = orders.filter(o => o.created_at_local.startsWith(today));
-  const totalRevenue = orders.reduce((s,o)=>s+o.total,0);
-  const todayRevenue = todayOrders.reduce((s,o)=>s+o.total,0);
-  const totalTax = orders.reduce((s,o)=>s+(o.tax_amount||0),0);
-  const avgOrder = orders.length ? totalRevenue / orders.length : 0;
+
+  // Fetch all refunds and sum amounts
+  const allRefunds = await db.refunds.toArray();
+  const totalRefunded = allRefunds.reduce((s, r) => s + (r.amount || 0), 0);
+  const todayRefunded = allRefunds
+    .filter(r => r.created_at_local?.startsWith(today))
+    .reduce((s, r) => s + (r.amount || 0), 0);
+
+  const grossRevenue = orders.reduce((s,o) => s + o.total, 0);
+  const netRevenue = grossRevenue - totalRefunded;
+  const todayGross = todayOrders.reduce((s,o) => s + o.total, 0);
+  const todayNet = todayGross - todayRefunded;
+  const totalTax = orders.filter(o=>o.status==='completed').reduce((s,o) => s + (o.tax_amount||0), 0);
+  const totalTaxRefunded = allRefunds.reduce((s, r) => s + (r.tax_amount || 0), 0);
+  const netTax = totalTax - totalTaxRefunded;
+  const completedOrders = orders.filter(o => o.status === 'completed');
+  const avgOrder = completedOrders.length ? completedOrders.reduce((s,o)=>s+o.total,0) / completedOrders.length : 0;
+  const refundCount = allRefunds.length;
 
   const payments = await db.payments.toArray();
+  // Only count payments from completed orders
+  const completedUuids = new Set(completedOrders.map(o => o.uuid));
   const byMethod = {};
-  for (const p of payments) { byMethod[p.method] = (byMethod[p.method]||0) + p.amount; }
+  for (const p of payments) {
+    if (completedUuids.has(p.order_uuid)) {
+      byMethod[p.method] = (byMethod[p.method]||0) + p.amount;
+    }
+  }
 
   document.getElementById('reports-grid').innerHTML = `
     <div class="report-card">
-      <div class="report-card-title">TODAY'S REVENUE</div>
-      <div class="report-card-value accent">${Utils.currency(todayRevenue)}</div>
-      <div class="report-card-sub">${todayOrders.length} transactions today</div>
+      <div class="report-card-title">TODAY'S NET REVENUE</div>
+      <div class="report-card-value accent">${Utils.currency(todayNet)}</div>
+      <div class="report-card-sub">${todayOrders.length} transactions · ${Utils.currency(todayRefunded)} refunded</div>
     </div>
     <div class="report-card">
-      <div class="report-card-title">ALL TIME REVENUE</div>
-      <div class="report-card-value">${Utils.currency(totalRevenue)}</div>
-      <div class="report-card-sub">${orders.length} total orders</div>
+      <div class="report-card-title">ALL TIME NET REVENUE</div>
+      <div class="report-card-value">${Utils.currency(netRevenue)}</div>
+      <div class="report-card-sub">${completedOrders.length} completed · ${refundCount} refund${refundCount !== 1 ? 's' : ''} (-${Utils.currency(totalRefunded)})</div>
     </div>
     <div class="report-card">
       <div class="report-card-title">TOTAL TAX COLLECTED</div>
-      <div class="report-card-value success">${Utils.currency(totalTax)}</div>
-      <div class="report-card-sub">Across all transactions</div>
+      <div class="report-card-value success">${Utils.currency(netTax)}</div>
+      <div class="report-card-sub">Completed transactions · -${Utils.currency(totalTaxRefunded)} refunded</div>
     </div>
     <div class="report-card">
       <div class="report-card-title">AVERAGE ORDER VALUE</div>
       <div class="report-card-value">${Utils.currency(avgOrder)}</div>
-      <div class="report-card-sub">Per transaction</div>
+      <div class="report-card-sub">Completed transactions only</div>
     </div>`;
 
   // Payment method breakdown chart
@@ -3276,6 +3360,12 @@ async function init() {
 
   } catch(err) {
     console.error('Init failed:', err);
+    // Auto-recover from stale IndexedDB schema
+    if (err.name === 'VersionError' || (err.message && err.message.includes('less than the existing'))) {
+      indexedDB.deleteDatabase('EnZoPOS');
+      setTimeout(() => location.reload(), 500);
+      return;
+    }
     document.getElementById('loading-screen').innerHTML = `
       <div style="color:var(--danger);text-align:center;padding:20px">
         <div style="font-size:24px;margin-bottom:8px">⚠</div>

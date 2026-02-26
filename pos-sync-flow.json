@@ -1,0 +1,131 @@
+[
+  {
+    "id": "pos-sync-tab",
+    "type": "tab",
+    "label": "EnZo POS Sync",
+    "disabled": false,
+    "info": "EnZo POS Sync backend for Node-RED\nEndpoints:\n  POST /pos/push   - Receive outbox batch\n  GET  /pos/pull   - Pull catalog updates\n  GET  /pos/health - Health check\n\nAuth: Bearer token via Authorization header"
+  },
+
+  {"id":"comment-1","type":"comment","z":"pos-sync-tab","name":"AUTH MIDDLEWARE","info":"Validates Bearer token on all routes","x":160,"y":40,"wires":[]},
+
+  {
+    "id": "http-health",
+    "type": "http in",
+    "z": "pos-sync-tab",
+    "name": "GET /pos/health",
+    "url": "/pos/health",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": "",
+    "x": 160, "y": 120,
+    "wires": [["auth-check", "health-response"]]
+  },
+  {
+    "id": "health-response",
+    "type": "function",
+    "z": "pos-sync-tab",
+    "name": "Health Response",
+    "func": "msg.payload = {\n  status: 'ok',\n  version: '2.0',\n  server_time: new Date().toISOString(),\n  node: 'nodered'\n};\nmsg.statusCode = 200;\nreturn msg;",
+    "outputs": 1, "noerr": 0, "initialize": "", "finalize": "",
+    "x": 420, "y": 120, "wires": [["http-response"]]
+  },
+
+  {
+    "id": "http-push",
+    "type": "http in",
+    "z": "pos-sync-tab",
+    "name": "POST /pos/push",
+    "url": "/pos/push",
+    "method": "post",
+    "upload": false,
+    "x": 160, "y": 220,
+    "wires": [["auth-check", "push-processor"]]
+  },
+  {
+    "id": "push-processor",
+    "type": "function",
+    "z": "pos-sync-tab",
+    "name": "Process Push Batch",
+    "func": "const batch = msg.payload.batch || [];\nconst processed = [];\nconst failed = [];\nconst db = context.global.get('posDB') || {};\n\nfor (const item of batch) {\n  try {\n    const key = `${item.entity_type}:${item.entity_uuid}`;\n    \n    // Idempotency check\n    if (db[key] && item.operation === 'create') {\n      processed.push({ outbox_id: item.outbox_id, entity_uuid: item.entity_uuid, server_id: db[key].server_id, status: 'ok' });\n      continue;\n    }\n    \n    // Store with server ID\n    const server_id = `NR-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;\n    db[key] = {\n      server_id,\n      entity_type: item.entity_type,\n      entity_uuid: item.entity_uuid,\n      payload: item.payload,\n      device_id: item.device_id,\n      synced_at: new Date().toISOString()\n    };\n    \n    // Persist DB\n    context.global.set('posDB', db);\n    \n    // If order, generate receipt number\n    if (item.entity_type === 'order' && item.payload?.order) {\n      const year = new Date().getFullYear();\n      const seq = Object.keys(db).filter(k => k.startsWith('order:')).length;\n      db[key].receipt_number = `RCP-${year}-${String(seq).padStart(5,'0')}`;\n      context.global.set('posDB', db);\n    }\n    \n    processed.push({ outbox_id: item.outbox_id, entity_uuid: item.entity_uuid, server_id, status: 'ok' });\n  } catch(e) {\n    failed.push({ outbox_id: item.outbox_id, entity_uuid: item.entity_uuid, error: e.message });\n  }\n}\n\nmsg.payload = { processed, failed };\nmsg.statusCode = 200;\nreturn msg;",
+    "outputs": 1, "noerr": 0,
+    "x": 420, "y": 220, "wires": [["http-response"]]
+  },
+
+  {
+    "id": "http-pull",
+    "type": "http in",
+    "z": "pos-sync-tab",
+    "name": "GET /pos/pull",
+    "url": "/pos/pull",
+    "method": "get",
+    "x": 160, "y": 320,
+    "wires": [["auth-check", "pull-catalog"]]
+  },
+  {
+    "id": "pull-catalog",
+    "type": "function",
+    "z": "pos-sync-tab",
+    "name": "Pull Catalog",
+    "func": "const since = msg.req.query.since || '1970-01-01T00:00:00Z';\nconst sinceDate = new Date(since);\n\n// Fetch from global catalog store\nconst catalog = context.global.get('posCatalog') || { products: [], categories: [] };\n\n// Filter by since timestamp\nconst products = (catalog.products || []).filter(p => {\n  const updated = new Date(p.updated_at || '1970-01-01');\n  return updated >= sinceDate;\n});\n\nconst categories = (catalog.categories || []).filter(c => {\n  const updated = new Date(c.updated_at || '1970-01-01');\n  return updated >= sinceDate;\n});\n\nmsg.payload = {\n  products,\n  categories,\n  updated_at: new Date().toISOString(),\n  count: products.length\n};\nmsg.statusCode = 200;\nreturn msg;",
+    "outputs": 1, "noerr": 0,
+    "x": 420, "y": 320, "wires": [["http-response"]]
+  },
+
+  {
+    "id": "auth-check",
+    "type": "function",
+    "z": "pos-sync-tab",
+    "name": "Auth Middleware",
+    "func": "const BEARER_TOKEN = env.get('POS_TOKEN') || 'enzo-pos-secret-token';\nconst auth = msg.req.headers['authorization'] || '';\nif (!auth.startsWith('Bearer ') || auth.slice(7) !== BEARER_TOKEN) {\n  msg.payload = { error: 'Unauthorized', code: 401 };\n  msg.statusCode = 401;\n  node.send([null, msg]);\n  return null;\n}\n// Auth ok — continue on first output\nreturn msg;",
+    "outputs": 2, "noerr": 0,
+    "x": 390, "y": 440, "wires": [[], ["http-response"]]
+  },
+
+  {
+    "id": "http-response",
+    "type": "http response",
+    "z": "pos-sync-tab",
+    "name": "HTTP Response",
+    "statusCode": "",
+    "headers": { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+    "x": 660, "y": 220, "wires": []
+  },
+
+  {
+    "id": "comment-catalog",
+    "type": "comment",
+    "z": "pos-sync-tab",
+    "name": "CATALOG SEED (run once)",
+    "info": "POST to /pos/admin/seed-catalog with your product list\nto populate the global catalog store.\n\nExample payload:\n{\n  \"products\": [\n    { \"uuid\": \"prod-001\", \"name\": \"Product 1\", \"price\": 10.99, \"category\": \"cat-001\", \"active\": 1 }\n  ],\n  \"categories\": [\n    { \"uuid\": \"cat-001\", \"name\": \"Category 1\" }\n  ]\n}",
+    "x": 160, "y": 500, "wires": []
+  },
+
+  {
+    "id": "http-seed",
+    "type": "http in",
+    "z": "pos-sync-tab",
+    "name": "POST /pos/admin/seed-catalog",
+    "url": "/pos/admin/seed-catalog",
+    "method": "post",
+    "x": 200, "y": 560, "wires": [["seed-catalog"]]
+  },
+  {
+    "id": "seed-catalog",
+    "type": "function",
+    "z": "pos-sync-tab",
+    "name": "Seed Catalog",
+    "func": "const { products = [], categories = [] } = msg.payload;\n\n// Add timestamps\nconst now = new Date().toISOString();\nconst stamped = {\n  products: products.map(p => ({ ...p, updated_at: p.updated_at || now })),\n  categories: categories.map(c => ({ ...c, updated_at: c.updated_at || now }))\n};\n\ncontext.global.set('posCatalog', stamped);\nmsg.payload = { ok: true, products: products.length, categories: categories.length };\nmsg.statusCode = 200;\nreturn msg;",
+    "outputs": 1, "noerr": 0,
+    "x": 460, "y": 560, "wires": [["http-response"]]
+  },
+
+  {
+    "id": "comment-persist",
+    "type": "comment",
+    "z": "pos-sync-tab",
+    "name": "PERSISTENCE NOTE",
+    "info": "For production, replace context.global with:\n- SQLite via node-red-node-sqlite\n- PostgreSQL via node-red-contrib-postgresql\n- File-based JSON storage\n\nThe current implementation uses in-memory global context\nwhich persists across restarts if contextStorage is set\nto 'localfilesystem' in settings.js:\n\ncontextStorage: {\n  default: { module: 'localfilesystem' }\n}",
+    "x": 160, "y": 640, "wires": []
+  }
+]

@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  enzo-pos-backend:
+    build: ./server-examples/rest
+    container_name: enzo-pos-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - API_TOKEN=enzo-pos-secret-change-me-in-production
+      - DATA_DIR=/app/data
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Optional: Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: enzo-pos-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./pos-pwa:/usr/share/nginx/html:ro
+    depends_on:
+      - enzo-pos-backend
+    restart: unless-stopped
+
+volumes:
+  pos-data:
